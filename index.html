@@ -64,6 +64,9 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--sky);outline-of
 .tabs button[aria-selected="true"]{background:var(--card);color:var(--pink-deep);box-shadow:0 1px 3px rgba(75,58,85,.12)}
 .acct-hero{display:flex;align-items:center;gap:10px}
 .acct-hero svg{width:48px;height:48px;flex:none}
+.notice.year{background:var(--sky-soft);border-color:var(--sky)}
+.tx.sum{cursor:default}
+.tx.sum:hover{background:transparent}
 .notice-btn{border:0;background:var(--sun);color:var(--ink);border-radius:999px;padding:6px 14px;font-weight:600;font-size:13px}
 .notice{background:var(--sun-soft);border:2px dashed var(--sun);border-radius:18px;padding:10px 14px;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;font-size:14px}
 
@@ -307,6 +310,11 @@ input[type=date]::-webkit-date-and-time-value{text-align:left}
     </div>
   </header>
 
+  <div class="notice year" id="yearBanner" hidden>
+    <span id="yearBannerText"></span>
+    <button class="notice-btn" id="yearExport">📥 ส่งออก CSV</button>
+  </div>
+
   <div class="notice" id="demo" hidden>
     <span>🐷 ตอนนี้แสดง <b>ข้อมูลตัวอย่าง</b> เปิดกระปุกของคุณ หรือสร้างกระปุกใหม่เพื่อเริ่มบันทึก</span>
     <button class="notice-btn" id="demoSetup">เปิด / สร้างกระปุก</button>
@@ -416,6 +424,17 @@ input[type=date]::-webkit-date-and-time-value{text-align:left}
   </form>
 </div>
 
+<div class="scrim" id="noticeScrim" hidden>
+  <div class="sheet" role="alertdialog" aria-modal="true" aria-labelledby="nTitle" aria-describedby="nText">
+    <div class="acct-hero"><svg aria-hidden="true"><use href="#piggy"/></svg><h3 id="nTitle"></h3></div>
+    <p id="nText" style="margin:0;line-height:1.6"></p>
+    <div class="actions">
+      <button type="button" class="btn ghost" id="nClose">เข้าใจแล้ว</button>
+      <button type="button" class="btn primary" id="nExport" hidden>📥 ส่งออก CSV</button>
+    </div>
+  </div>
+</div>
+
 <div class="ptr" id="ptr" aria-live="polite"><span>🐷</span><b id="ptrText">ดึงลงเพื่อรีเฟรช</b></div>
 
 <div class="toast" id="toast" hidden><span id="toastMsg"></span><button id="toastUndo" hidden>เลิกทำ</button></div>
@@ -449,7 +468,7 @@ const state = { y:today.getFullYear(), m:today.getMonth(), view:'out', cat:null,
 
 /* ---------- ที่เก็บข้อมูล: Firebase (Auth + Firestore) ---------- */
 const CFG_KEY='fufu.config';
-const APP_VERSION='2026-11-09.4';
+const APP_VERSION='2026-11-09.5';
 // ระบบเดิม (Google Sheet ผ่าน Apps Script) ใช้เฉพาะตอนย้ายกระปุกเก่ามา Firebase ครั้งแรก
 const LEGACY_API='https://script.google.com/macros/s/AKfycbzRaMsLpCFFZQkslcCaTXvivrobJdFbpyzwfsJpA3iO_HxSyDNGZe3x3QCg-0NOEPEj/exec';
 firebase.initializeApp({
@@ -543,19 +562,87 @@ async function register(name,pin,icon){
   return {name, icon};
 }
 
+/* โหลดทีละเดือน */
+let subKey=null;
+const curKey=()=>state.y+'-'+pad(state.m+1);
+const sumCol=()=>db.collection('users').doc(user.uid).collection('summary');
+function sumRecs(key,sum){
+  return Object.entries(sum.lines||{}).map(([k,a])=>{ const [t,c]=decodeURIComponent(k).split('|');
+    return {id:'sum-'+k, date:key+'-01', type:t==='in'?'in':'out', cat:c, amount:Math.round(a*100)/100, note:'ยอดรวมหมวด'+c, summary:true, createdAt:0} }).filter(r=>r.amount>0);
+}
+function subscribeMonth(){
+  if(unsub){ unsub(); unsub=null }
+  const key=curKey(); subKey=key;
+  let tx=[], sum=null, gotTx=false;
+  state.recs=[]; state.loaded=false; render();
+  const apply=()=>{ if(subKey!==key) return; state.recs=tx.concat(sum?sumRecs(key,sum):[]); state.loaded=gotTx; render() };
+  unsub=txCol().where('date','>=',key+'-01').where('date','<=',key+'-31').onSnapshot(snap=>{
+    tx=snap.docs.map(d=>({id:d.id,...d.data()})); gotTx=true; setStatus('',''); apply();
+  }, err=>{ gotTx=true; setStatus('bad','โหลดข้อมูลไม่ได้: '+fbErr(err)); apply() });
+  if(state.y<today.getFullYear()) sumCol().doc(key).get().then(d=>{ sum=d.exists?d.data():null; apply() }).catch(()=>{});
+}
 async function load(){
   updateAcct();
-  if(unsub){ unsub(); unsub=null }
+  if(unsub){ unsub(); unsub=null } subKey=null;
   if(!user){ state.recs=makeSamples(); state.loaded=true; $('#demo').hidden=false; render(); return }
-  $('#demo').hidden=true; state.loaded=false; render();
-  await new Promise(res=>{
-    let first=true; const done=()=>{ if(first){ first=false; res() } };
-    unsub=txCol().onSnapshot(snap=>{
-      state.recs=snap.docs.map(d=>({id:d.id,...d.data()})); state.loaded=true; setStatus('',''); render(); done();
-    }, err=>{ state.loaded=true; setStatus('bad','โหลดข้อมูลไม่ได้: '+fbErr(err)); render(); done() });
-  });
+  $('#demo').hidden=true;
+  subscribeMonth();
   db.collection('users').doc(user.uid).get().then(d=>{ const p=d.data(); if(p && (p.name!==cfg?.name || p.icon!==cfg?.icon)){ cfg={uid:user.uid,name:p.name,icon:p.icon||'🐷'}; saveCfg(); updateAcct() } }).catch(()=>{});
+  yearlyPurge();
 }
+
+/* ล้างรายการย่อยของปีที่ผ่านมาทุกวันที่ 1 ม.ค. (เก็บยอดสรุปรายเดือนไว้) */
+let purgeRunning=false;
+async function yearlyPurge(){
+  if(!user || purgeRunning) return; purgeRunning=true;
+  const start=today.getFullYear()+'-01-01';
+  try{
+    const probe=await txCol().where('date','<',start).limit(1).get();
+    if(probe.empty) return;
+    const docs=(await txCol().where('date','<',start).get()).docs;
+    const inc=firebase.firestore.FieldValue.increment, months=new Set();
+    for(let i=0;i<docs.length;i+=400){
+      const chunk=docs.slice(i,i+400), agg={};
+      chunk.forEach(d=>{ const r=d.data(), k=String(r.date).slice(0,7), t=r.type==='in'?'in':'out', a=Number(r.amount)||0;
+        const m=agg[k]||(agg[k]={in:0,out:0,count:0,lines:{}}); m[t]+=a; m.count++;
+        const lk=encodeURIComponent(t+'|'+(r.cat||'อื่นๆ')); m.lines[lk]=(m.lines[lk]||0)+a; months.add(k) });
+      const b=db.batch();
+      Object.entries(agg).forEach(([k,m])=>{ const lines={}; Object.entries(m.lines).forEach(([lk,a])=>lines[lk]=inc(a));
+        b.set(sumCol().doc(k),{in:inc(m.in),out:inc(m.out),count:inc(m.count),lines,purgedAt:Date.now()},{merge:true}) });
+      chunk.forEach(d=>b.delete(d.ref));
+      await b.commit();
+    }
+    const years=[...new Set([...months].map(k=>+k.slice(0,4)+543))].sort().join(', ');
+    showNotice('🧹 ล้างข้อมูลปี '+years+' แล้ว','ลบรายการย่อย '+docs.length.toLocaleString('th-TH')+' รายการเรียบร้อย ยอดเงินเข้า เงินออก และยอดแต่ละหมวดของทุกเดือนยังดูย้อนหลังได้ตามเดิม',false);
+    subKey=null; render();
+  }catch(e){ console.warn('yearly purge',e) }
+  finally{ purgeRunning=false }
+}
+
+/* แจ้งเตือนก่อนล้างข้อมูล (ทั้งเดือนธันวาคม) */
+const noticeShown=new Set();
+function yearNotice(){
+  const banner=$('#yearBanner');
+  if(!user || today.getMonth()!==11){ banner.hidden=true; return }
+  const y=today.getFullYear(), be=y+543;
+  $('#yearBannerText').innerHTML=`📢 วันที่ 1 ม.ค. ${be+1} ระบบจะล้าง<b>รายการย่อยของปี ${be}</b> (ยอดสรุปรายเดือนยังอยู่) ส่งออกไฟล์เก็บไว้ก่อนได้`;
+  banner.hidden=false;
+  const last=today.getDate()>=29, key='fufu.warned.'+y+(last?'.last':'');
+  let seen=noticeShown.has(key); try{ seen=seen||!!localStorage.getItem(key) }catch(_){}
+  if(!seen){
+    noticeShown.add(key); try{ localStorage.setItem(key,'1') }catch(_){}
+    const left=31-today.getDate()+1;
+    showNotice('📢 อีก '+left+' วันจะล้างข้อมูลปี '+be,
+      'วันที่ 1 มกราคม '+(be+1)+' ระบบจะลบรายการย่อยทั้งหมดของปี '+be+' อัตโนมัติ ยอดสรุปรายเดือน (เงินเข้า เงินออก ยอดแต่ละหมวด) ยังดูย้อนหลังได้ ถ้าอยากเก็บรายละเอียดทุกรายการ ให้ส่งออกเป็นไฟล์ CSV ก่อน',true);
+  }
+}
+function showNotice(title,text,withExport){
+  $('#nTitle').textContent=title; $('#nText').textContent=text; $('#nExport').hidden=!withExport;
+  $('#noticeScrim').hidden=false;
+}
+$('#nClose').onclick=()=>{ $('#noticeScrim').hidden=true };
+$('#nExport').onclick=()=>{ $('#noticeScrim').hidden=true; exportCSV() };
+$('#yearExport').onclick=()=>exportCSV();
 
 /* บัญชีกระปุก: เปิดกระปุก / สร้างกระปุกใหม่ / ออกจากกระปุก */
 let setMode='login', pickIcon='🐷';
@@ -578,7 +665,7 @@ function setModeTo(m){
   $('#iconWrap').hidden=m==='login'; $('#iconLabel').textContent = me ? 'แตะเพื่อเปลี่ยนไอคอน' : 'เลือกไอคอนกระปุก';
   $('#setTitle').textContent = me ? 'กระปุกของ '+(cfg?.name||'') : m==='register' ? 'สร้างกระปุกใหม่' : 'เปิดกระปุก';
   $('#setHelp').textContent = me ? 'เครื่องนี้เปิดกระปุกนี้อยู่ ถ้าจะให้คนอื่นใช้เครื่องนี้ กด “ออกจากกระปุก” ก่อน'
-    : m==='register' ? 'ตั้งชื่อกระปุกที่ไม่ซ้ำใคร และ PIN อย่างน้อย 4 ตัว จำ PIN ไว้ให้ดี เพราะลืมแล้วกู้คืนไม่ได้'
+    : m==='register' ? 'ตั้งชื่อกระปุกที่ไม่ซ้ำใคร และ PIN อย่างน้อย 4 ตัว จำ PIN ไว้ให้ดี เพราะลืมแล้วกู้คืนไม่ได้ ทุกวันที่ 1 ม.ค. ระบบจะล้างรายการย่อยของปีก่อน (เก็บยอดสรุปรายเดือนไว้)'
     : 'ใส่ชื่อกระปุกและ PIN ของคุณ เครื่องนี้จะจำไว้ให้';
   $('#sSave').textContent = m==='register' ? 'สร้างกระปุก' : 'เปิดกระปุก';
   $('#sPin').autocomplete = m==='register' ? 'new-password' : 'current-password';
@@ -618,16 +705,20 @@ $('#sClear').onclick=async()=>{
   await auth.signOut().catch(()=>{});
   cfg=null; saveCfg(); closeSettings(); toast('ออกจากกระปุกแล้ว'); setTimeout(openSettings,300);
 };
-$('#sExport').onclick=async()=>{
+$('#sExport').onclick=()=>exportCSV();
+async function exportCSV(){
+  let all=state.recs.filter(r=>!r.summary);
+  if(user){ toast('กำลังเตรียมไฟล์…'); try{ all=(await txCol().get()).docs.map(d=>({id:d.id,...d.data()})) }catch(e){ toast('ส่งออกไม่สำเร็จ: '+fbErr(e)); return } }
+  if(!all.length){ toast('ยังไม่มีรายการให้ส่งออก'); return }
   const rows=[['วันที่','ประเภท','หมวด','จำนวนเงิน','บันทึก']].concat(
-    state.recs.slice().sort((a,b)=>a.date.localeCompare(b.date)).map(r=>[r.date, r.type==='in'?'รายรับ':'รายจ่าย', r.cat, r.amount, r.note||'']));
+    all.slice().sort((a,b)=>a.date.localeCompare(b.date)).map(r=>[r.date, r.type==='in'?'รายรับ':'รายจ่าย', r.cat, r.amount, r.note||'']));
   const csv='\ufeff'+rows.map(r=>r.map(v=>{ v=String(v); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v }).join(',')).join('\r\n');
   const fname='กระปุกฟูฟู-'+(cfg?.name||'ข้อมูล')+'-'+isoDay(today)+'.csv';
   const file=new File([csv],fname,{type:'text/csv'});
   try{ if(navigator.canShare && navigator.canShare({files:[file]})){ await navigator.share({files:[file],title:fname}); return } }catch(e){ if(e.name==='AbortError') return }
   const a=document.createElement('a'); a.href=URL.createObjectURL(file); a.download=fname; document.body.appendChild(a); a.click(); a.remove();
   setTimeout(()=>URL.revokeObjectURL(a.href),5000);
-};
+}
 function saveRec(rec){
   const {id,_prev,...data}=rec;
   if(!user){ const saved={...data,id:id||('d'+Date.now())}; upsert(saved); render(); return Promise.resolve(saved) }
@@ -665,6 +756,8 @@ function makeSamples(){
 function monthRecs(){ const key=state.y+'-'+pad(state.m+1); return state.recs.filter(r=>(r.date||'').startsWith(key)) }
 
 function render(){
+  if(user && subKey!==curKey()){ subscribeMonth(); return }
+  yearNotice();
   $('#monthLabel').textContent=new Date(state.y,state.m,1).toLocaleDateString('th-TH',{month:'long',year:'numeric'});
   const rs=monthRecs();
   const sIn=rs.filter(r=>r.type==='in').reduce((a,r)=>a+r.amount,0);
@@ -713,7 +806,8 @@ function renderDaily(rs){
   $('#avgDays').textContent=`เฉลี่ยจาก ${elapsed} วัน`;
   $('#avgIn').textContent=fmt(aIn); $('#avgOut').textContent=fmt(aOut);
   const tot=aIn+aOut; $('#cmpIn').style.flexGrow=tot?aIn/tot:1; $('#cmpOut').style.flexGrow=tot?aOut/tot:1;
-  $('.cmp').hidden=!tot; $('.chart-h').hidden=!tot; $('#dailySvg').style.display=tot?'':'none';
+  const hasSum=rs.some(r=>r.summary);
+  $('.cmp').hidden=!tot; $('.chart-h').hidden=!tot||hasSum; $('#dailySvg').style.display=tot&&!hasSum?'':'none';
   $('#avgNote').textContent = !tot ? 'ยังไม่มีรายการเดือนนี้'
     : diff>0 ? `เหลือเฉลี่ยวันละ ${fmt(diff)} 🎉` : diff<0 ? `ใช้เกินเฉลี่ยวันละ ${fmt(-diff)} 🥺` : 'เข้าเท่ากับออกพอดี';
   $('#avgNote').className='avgnote num '+(diff>0?'good':diff<0?'bad':'');
@@ -743,25 +837,25 @@ function renderList(rs){
   let list=rs.slice();
   if(state.cat) list=list.filter(r=>r.type===state.view&&catOf(r.type,r.cat).name===state.cat);
   if(state.q){ const q=state.q.toLowerCase(); list=list.filter(r=>(r.note||'').toLowerCase().includes(q)||(r.cat||'').includes(q)) }
-  list.sort((a,b)=>b.date.localeCompare(a.date)||(b.createdAt||0)-(a.createdAt||0));
+  list.sort((a,b)=>(!!a.summary-!!b.summary)||b.date.localeCompare(a.date)||(b.createdAt||0)-(a.createdAt||0));
   $('#clearFilter').hidden=!(state.cat||state.q);
   $('#count').textContent=list.length?`(${list.length})`:'';
   const piggy='<svg aria-hidden="true"><use href="#piggy"/></svg>';
   if(!state.loaded){ $('#list').innerHTML=`<div class="empty">${piggy}<span>กำลังเปิดกระปุก…</span></div>`; return }
-  if(!list.length){ $('#list').innerHTML=`<div class="empty">${piggy}<b>${state.cat||state.q?'ไม่เจอรายการที่ค้นหา':'กระปุกเดือนนี้ยังว่างอยู่'}</b><span>กดปุ่ม “หยอดกระปุก” มุมขวาล่าง เพื่อบันทึกเงินเข้าหรือเงินออก</span></div>`; return }
-  const groups={}; list.forEach(r=>(groups[r.date]??=[]).push(r));
+  if(!list.length){ $('#list').innerHTML=`<div class="empty">${piggy}<b>${state.cat||state.q?'ไม่เจอรายการที่ค้นหา':'กระปุกเดือนนี้ยังว่างอยู่'}</b><span>กดปุ่ม “หยอดกระปุก” ด้านบน เพื่อบันทึกเงินเข้าหรือเงินออก</span></div>`; return }
+  const groups={}; list.forEach(r=>(groups[r.summary?'sum':r.date]??=[]).push(r));
   $('#list').innerHTML=Object.entries(groups).map(([date,items])=>{
     const net=items.reduce((a,r)=>a+(r.type==='in'?r.amount:-r.amount),0);
-    const label=date===isoDay(today)?'วันนี้':new Date(date+'T00:00').toLocaleDateString('th-TH',{weekday:'short',day:'numeric',month:'short'});
+    const label=date==='sum'?'📦 ยอดสรุปทั้งเดือน (รายการย่อยถูกล้างแล้ว)':date===isoDay(today)?'วันนี้':new Date(date+'T00:00').toLocaleDateString('th-TH',{weekday:'short',day:'numeric',month:'short'});
     return `<div class="day"><div class="day-h num"><span>${label}</span><span>${net>=0?'+':'−'}${fmt(Math.abs(net))}</span></div>
       ${items.map(r=>{ const c=catOf(r.type,r.cat); return `
-      <button class="tx${state.pending.has(r.id)?' pending':''}" data-id="${esc(r.id)}">
+      <button class="tx${state.pending.has(r.id)?' pending':''}${r.summary?' sum':''}" data-id="${esc(r.id)}"${r.summary?' disabled':''}>
         <span class="blob" style="background:${tint(c.c,35)}">${c.e}</span>
         <span class="t"><b>${esc(r.note||c.name)}</b><small>${esc(c.name)}</small></span>
         <span class="a num ${r.type}">${r.type==='in'?'+':'−'}${fmt2(r.amount)}</span>
       </button>`}).join('')}</div>`;
   }).join('');
-  document.querySelectorAll('.tx').forEach(b=>b.onclick=()=>{ if(!state.pending.has(b.dataset.id)) openSheet(state.recs.find(r=>r.id===b.dataset.id)) });
+  document.querySelectorAll('.tx:not(.sum)').forEach(b=>b.onclick=()=>{ if(!state.pending.has(b.dataset.id)) openSheet(state.recs.find(r=>r.id===b.dataset.id)) });
 }
 
 /* ---------- ฟอร์มบันทึก ---------- */
