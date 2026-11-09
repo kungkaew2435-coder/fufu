@@ -36,7 +36,7 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--sky);outline-of
 .top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .brand{display:flex;align-items:center;gap:10px}
 .brand svg{width:52px;height:52px;flex:none}
-.brand h1{font-family:var(--display);font-size:26px;font-weight:700;margin:0;line-height:1.1;color:var(--pink-deep)}
+.brand h1{font-family:var(--display);font-size:30px;font-weight:700;margin:0;line-height:1.1;color:var(--pink-deep)}
 .brand p{margin:0;font-size:12.5px;color:var(--muted)}
 .month{display:flex;align-items:center;gap:2px;background:var(--card);border-radius:999px;padding:5px;box-shadow:var(--shadow)}
 .month button{width:36px;height:36px;border-radius:50%;border:0;background:var(--pink-soft);color:var(--pink-deep);font-size:20px;line-height:1;display:grid;place-items:center}
@@ -166,6 +166,7 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--sky);outline-of
 .status i{width:8px;height:8px;border-radius:50%;background:var(--faint)}
 .status.ok i{background:var(--mint)} .status.busy i{background:var(--sun);animation:blink 1s infinite}
 .status.bad i{background:var(--pink-deep)}
+.status:not(.bad){display:none}
 @keyframes blink{50%{opacity:.3}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 /* ---------- มือถือ ---------- */
@@ -177,8 +178,8 @@ input[type=date]::-webkit-date-and-time-value{text-align:left}
   body{padding-block:12px 32px;font-size:14.5px}
   .wrap{gap:14px}
   .top{gap:10px}
-  .brand svg{width:42px;height:42px}
-  .brand h1{font-size:22px}
+  .brand svg{width:46px;height:46px}
+  .brand h1{font-size:27px}
   .top-r{width:100%;justify-content:space-between}
   .month{padding:4px}
   .month button{width:32px;height:32px;font-size:18px}
