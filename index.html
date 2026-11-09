@@ -22,12 +22,11 @@
 }
 *{box-sizing:border-box}
 [hidden]{display:none!important}
-.adv summary{cursor:pointer}
 html{background:var(--bg)}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.55;
   background-image:radial-gradient(circle at 8% 0%,var(--pink-soft) 0,transparent 240px),radial-gradient(circle at 100% 18%,var(--sky-soft) 0,transparent 260px),radial-gradient(circle at 40% 100%,var(--sun-soft) 0,transparent 300px);
   background-attachment:fixed;min-height:100vh;
-  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:18px 120px}
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:18px 40px}
 .num{font-variant-numeric:tabular-nums}
 button{font:inherit;color:inherit;cursor:pointer}
 button:focus-visible,input:focus-visible{outline:3px solid var(--sky);outline-offset:2px}
@@ -128,7 +127,7 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--sky);outline-of
 .empty b{font-family:var(--display);color:var(--ink);font-size:17px}
 
 /* add button */
-.fab{position:fixed;right:calc(20px + env(safe-area-inset-right,0px));bottom:calc(20px + env(safe-area-inset-bottom,0px));z-index:20;border:0;background:var(--pink);color:#fff;border-radius:999px;height:60px;padding:0 24px 0 10px;display:flex;align-items:center;gap:8px;font-family:var(--display);font-weight:700;font-size:17px;box-shadow:0 6px 0 var(--pink-deep),0 12px 26px rgba(232,84,140,.35);transition:transform .12s}
+.fab{width:100%;border:0;background:var(--pink);color:#fff;border-radius:999px;height:58px;padding:0 20px;display:flex;align-items:center;justify-content:center;gap:10px;font-family:var(--display);font-weight:700;font-size:18px;box-shadow:0 5px 0 var(--pink-deep),0 10px 22px rgba(232,84,140,.28);transition:transform .12s}
 .fab:active{transform:translateY(3px);box-shadow:0 3px 0 var(--pink-deep)}
 .fab .plus{width:42px;height:42px;border-radius:50%;background:#fff;color:var(--pink);display:grid;place-items:center;font-size:28px;line-height:1}
 
@@ -161,7 +160,7 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--sky);outline-of
 .btn.danger{background:transparent;color:var(--pink-deep);padding:0 6px;text-decoration:underline}
 .err{color:var(--pink-deep);font-size:13px;min-height:1em}
 
-.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(96px + env(safe-area-inset-bottom,0px));z-index:40;background:var(--ink);color:#fff;border-radius:16px;padding:10px 16px;display:flex;gap:14px;align-items:center;font-size:14px;max-width:calc(100% - 32px)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(24px + env(safe-area-inset-bottom,0px));z-index:40;background:var(--ink);color:#fff;border-radius:16px;padding:10px 16px;display:flex;gap:14px;align-items:center;font-size:14px;max-width:calc(100% - 32px)}
 .toast button{border:0;background:transparent;color:var(--sun);font-weight:700}
 .status{display:inline-flex;align-items:center;gap:6px}
 .status i{width:8px;height:8px;border-radius:50%;background:var(--faint)}
@@ -175,7 +174,7 @@ input,select,textarea{font-size:16px}
 input[type=date]{min-width:0;max-width:100%}
 input[type=date]::-webkit-date-and-time-value{text-align:left}
 @media (max-width:520px){
-  body{padding-block:12px 100px;font-size:14.5px}
+  body{padding-block:12px 32px;font-size:14.5px}
   .wrap{gap:14px}
   .top{gap:10px}
   .brand svg{width:42px;height:42px}
@@ -208,9 +207,9 @@ input[type=date]::-webkit-date-and-time-value{text-align:left}
   .tx .blob{width:36px;height:36px;font-size:17px}
   .tx .t b{font-size:14.5px}
   .tx .a{font-size:15px}
-  .fab{right:calc(16px + env(safe-area-inset-right,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));width:58px;height:58px;padding:0;justify-content:center;font-size:0;gap:0;box-shadow:0 4px 0 var(--pink-deep),0 10px 22px rgba(232,84,140,.3)}
-  .fab .plus{width:auto;height:auto;background:none;color:#fff;font-size:34px;font-weight:600}
-  .toast{bottom:calc(80px + env(safe-area-inset-bottom,0px));font-size:13.5px}
+  .fab{height:54px;font-size:17px;box-shadow:0 4px 0 var(--pink-deep),0 8px 18px rgba(232,84,140,.28)}
+  .fab .plus{width:36px;height:36px;font-size:24px}
+  .toast{font-size:13.5px}
   .sheet{border-radius:22px 22px 0 0;gap:12px;max-height:92dvh;padding:16px 16px calc(14px + env(safe-area-inset-bottom,0px));padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
   .sheet h3{font-size:18px}
   .acct-hero svg{width:40px;height:40px}
@@ -295,6 +294,8 @@ input[type=date]::-webkit-date-and-time-value{text-align:left}
         </div>
       </section>
 
+      <button class="fab" id="addBtn"><span class="plus" aria-hidden="true">+</span>หยอดกระปุก</button>
+
       <section class="card" aria-label="แยกตามหมวด">
         <div class="card-h">
           <h2><span class="dot" style="background:var(--sun-soft)">🍩</span>แยกตามหมวด</h2>
@@ -326,7 +327,6 @@ input[type=date]::-webkit-date-and-time-value{text-align:left}
   </div>
 </div>
 
-<button class="fab" id="addBtn" aria-label="หยอดกระปุก"><span class="plus">+</span>หยอดกระปุก</button>
 
 <div class="scrim" id="scrim" hidden>
   <form class="sheet" id="form" role="dialog" aria-modal="true" aria-labelledby="sheetTitle" novalidate>
@@ -361,7 +361,6 @@ input[type=date]::-webkit-date-and-time-value{text-align:left}
     <div class="field" id="nameWrap"><label class="label" for="sName">ชื่อกระปุก</label><input id="sName" type="text" maxlength="30" autocomplete="username" placeholder="เช่น กระปุกของมะลิ"></div>
     <div class="field" id="pinWrap"><label class="label" for="sPin">PIN</label><input id="sPin" type="password" maxlength="40" autocomplete="current-password"></div>
     <div class="field" id="pin2Wrap" hidden><label class="label" for="sPin2">ใส่ PIN อีกครั้ง</label><input id="sPin2" type="password" maxlength="40" autocomplete="new-password"></div>
-    <details class="adv"><summary class="label">ขั้นสูง: เปลี่ยนลิงก์ API</summary><div class="field" style="margin-top:8px"><label class="label" for="sUrl">ลิงก์ Web app (ลงท้ายด้วย /exec)</label><input id="sUrl" type="url" autocomplete="off" spellcheck="false"></div></details>
     <div class="err" id="sErr" role="alert"></div>
     <div class="actions">
       <button type="button" class="btn ghost" id="sCancel">ปิด</button>
@@ -430,7 +429,7 @@ let setMode='login';
 function setModeTo(m){
   setMode=m; const me=m==='me';
   document.querySelectorAll('.tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.mode===m));
-  $('.tabs').hidden=me; $('#nameWrap').hidden=me; $('#pinWrap').hidden=me; $('#pin2Wrap').hidden=m!=='register'; $('.adv').hidden=me;
+  $('.tabs').hidden=me; $('#nameWrap').hidden=me; $('#pinWrap').hidden=me; $('#pin2Wrap').hidden=m!=='register';
   $('#sClear').hidden=!me; $('#sSave').hidden=me;
   $('#setTitle').textContent = me ? 'กระปุกของ '+cfg.name : m==='register' ? 'สร้างกระปุกใหม่' : 'เปิดกระปุก';
   $('#setHelp').textContent = me ? 'เครื่องนี้เปิดกระปุกนี้อยู่ ถ้าจะให้คนอื่นใช้เครื่องนี้ กด “ออกจากกระปุก” ก่อน'
@@ -441,7 +440,7 @@ function setModeTo(m){
   $('#sErr').textContent='';
 }
 function openSettings(){
-  $('#sUrl').value=cfg?.url||API_URL; $('#sName').value=cfg?.name||''; $('#sPin').value=''; $('#sPin2').value='';
+  $('#sName').value=cfg?.name||''; $('#sPin').value=''; $('#sPin2').value='';
   setModeTo(HAS_GAS()?'me':'login');
   $('#setScrim').hidden=false; setTimeout(()=>(HAS_GAS()?$('#sCancel'):$('#sName')).focus(),60);
 }
@@ -454,8 +453,7 @@ $('#setForm').addEventListener('submit',async e=>{
   e.preventDefault();
   if(setMode==='me') return;
   const reg=setMode==='register';
-  const c={url:$('#sUrl').value.trim()||API_URL,name:$('#sName').value.trim().replace(/\s+/g,' '),pin:$('#sPin').value};
-  if(!/^https:\/\/script\.google(usercontent)?\.com\/.+\/exec$/.test(c.url)){ $('#sErr').textContent='ลิงก์ API ต้องขึ้นต้นด้วย https://script.google.com/ และลงท้ายด้วย /exec'; return }
+  const c={url:cfg?.url||API_URL,name:$('#sName').value.trim().replace(/\s+/g,' '),pin:$('#sPin').value};
   if(c.name.length<2){ $('#sErr').textContent='ใส่ชื่อกระปุกอย่างน้อย 2 ตัวอักษร'; $('#sName').focus(); return }
   if(c.pin.length<4){ $('#sErr').textContent='PIN ต้องมีอย่างน้อย 4 ตัว'; $('#sPin').focus(); return }
   if(reg && c.pin!==$('#sPin2').value){ $('#sErr').textContent='PIN สองช่องไม่ตรงกัน'; $('#sPin2').focus(); return }
