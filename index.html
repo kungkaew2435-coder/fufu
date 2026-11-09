@@ -116,6 +116,20 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--sky);outline-of
 .bar{height:5px;border-radius:9px;background:var(--bg);margin-top:3px;overflow:hidden}
 .bar i{display:block;height:100%;border-radius:9px}
 
+.avg2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.avgbox{border-radius:16px;padding:10px 12px;display:grid;gap:2px}
+.avgbox span{font-size:12.5px;color:var(--muted)}
+.avgbox b{font-family:var(--display);font-size:20px}
+.avgbox.in{background:var(--sky-soft)} .avgbox.in b{color:var(--sky-deep)}
+.avgbox.out{background:var(--pink-soft)} .avgbox.out b{color:var(--pink-deep)}
+.cmp{display:flex;height:10px;border-radius:99px;overflow:hidden;gap:3px}
+.cmp i{display:block;min-width:4px;transition:flex-grow .4s}
+.cmp .cin{background:var(--sky)} .cmp .cout{background:var(--pink)}
+.avgnote{margin:-4px 0 0;font-size:13.5px;font-weight:600;color:var(--muted)}
+.avgnote.good{color:var(--sky-deep)} .avgnote.bad{color:var(--pink-deep)}
+.chart-h{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px}
+.legend{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted)}
+.legend i{width:10px;height:10px;border-radius:3px;display:inline-block;margin-left:6px}
 .daily svg{width:100%;height:auto;display:block}
 .daily text{fill:var(--faint);font-size:10px;font-family:var(--body)}
 
@@ -210,6 +224,8 @@ input[type=date]::-webkit-date-and-time-value{text-align:left}
   .mini .v{font-size:18px}
   .jar{height:12px}
   .jar-cap{font-size:12px}
+  .avgbox b{font-size:18px}
+  .avgbox span{font-size:12px}
   .seg button{padding:4px 11px;font-size:12.5px}
   .donut-row{grid-template-columns:minmax(0,1fr);justify-items:stretch;gap:12px}
   .donut{width:128px;height:128px;justify-self:center}
@@ -325,9 +341,16 @@ input[type=date]::-webkit-date-and-time-value{text-align:left}
         </div>
       </section>
 
-      <section class="card daily" aria-label="เงินออกรายวัน">
-        <div class="card-h"><h2><span class="dot" style="background:var(--sky-soft)">📅</span>เงินออกรายวัน</h2><span class="label num" id="avgDay"></span></div>
-        <svg id="dailySvg" viewBox="0 0 320 112" role="img" aria-label="กราฟเงินออกรายวัน"></svg>
+      <section class="card daily" aria-label="เงินเข้า-เงินออกเฉลี่ย">
+        <div class="card-h"><h2><span class="dot" style="background:var(--sky-soft)">⚖️</span>เงินเข้า-เงินออกเฉลี่ย</h2><span class="label num" id="avgDays"></span></div>
+        <div class="avg2">
+          <div class="avgbox in"><span>🌧️ เข้าเฉลี่ย/วัน</span><b class="num" id="avgIn">฿0</b></div>
+          <div class="avgbox out"><span>🌸 ออกเฉลี่ย/วัน</span><b class="num" id="avgOut">฿0</b></div>
+        </div>
+        <div class="cmp" aria-hidden="true"><i class="cin" id="cmpIn"></i><i class="cout" id="cmpOut"></i></div>
+        <p class="avgnote num" id="avgNote"></p>
+        <div class="chart-h"><span class="label">ยอดสะสมตั้งแต่ต้นเดือน</span><span class="legend"><i style="background:var(--sky)"></i>เข้า<i style="background:var(--pink)"></i>ออก</span></div>
+        <svg id="dailySvg" viewBox="0 0 320 132" role="img" aria-label="กราฟยอดเงินเข้าและเงินออกสะสมรายวัน"></svg>
       </section>
     </aside>
 
@@ -586,19 +609,40 @@ function renderCats(rs){
 }
 
 function renderDaily(rs){
-  const days=new Date(state.y,state.m+1,0).getDate(), v=new Array(days).fill(0);
-  rs.filter(r=>r.type==='out').forEach(r=>{ const d=+r.date.slice(8,10); if(d>=1&&d<=days) v[d-1]+=r.amount });
-  const max=Math.max(...v,1), W=320, top=8, base=92, bw=W/days;
+  const days=new Date(state.y,state.m+1,0).getDate();
   const isThis=state.y===today.getFullYear()&&state.m===today.getMonth();
   const elapsed=isThis?today.getDate():days;
-  const avg=v.slice(0,elapsed).reduce((a,b)=>a+b,0)/Math.max(elapsed,1);
-  let s=`<line x1="0" y1="${base}" x2="${W}" y2="${base}" stroke="var(--line)" stroke-width="2"/>`;
-  if(avg>0){ const ay=base-(avg/max)*(base-top); s+=`<line x1="0" y1="${ay}" x2="${W}" y2="${ay}" stroke="var(--sun)" stroke-width="1.5" stroke-dasharray="4 4"/>` }
-  v.forEach((x,i)=>{ const h=x/max*(base-top), cx=i*bw, hi=isThis&&i+1===today.getDate();
-    s+=`<rect x="${cx+bw*.15}" y="${base-h}" width="${bw*.7}" height="${Math.max(h,x?2:0)}" rx="${Math.min(bw*.35,4)}" fill="${hi?'var(--pink-deep)':'var(--pink)'}" opacity="${hi?1:.75}"><title>วันที่ ${i+1}: ${fmt(x)}</title></rect>`;
-    if(i===0||(i+1)%5===0) s+=`<text x="${cx+bw/2}" y="${base+15}" text-anchor="middle">${i+1}</text>` });
+  const vin=new Array(days).fill(0), vout=new Array(days).fill(0);
+  rs.forEach(r=>{ const d=+r.date.slice(8,10); if(d>=1&&d<=days) (r.type==='in'?vin:vout)[d-1]+=r.amount });
+  const sum=a=>a.slice(0,elapsed).reduce((x,y)=>x+y,0);
+  const aIn=sum(vin)/elapsed, aOut=sum(vout)/elapsed, diff=aIn-aOut;
+  $('#avgDays').textContent=`เฉลี่ยจาก ${elapsed} วัน`;
+  $('#avgIn').textContent=fmt(aIn); $('#avgOut').textContent=fmt(aOut);
+  const tot=aIn+aOut; $('#cmpIn').style.flexGrow=tot?aIn/tot:1; $('#cmpOut').style.flexGrow=tot?aOut/tot:1;
+  $('.cmp').hidden=!tot; $('.chart-h').hidden=!tot; $('#dailySvg').style.display=tot?'':'none';
+  $('#avgNote').textContent = !tot ? 'ยังไม่มีรายการเดือนนี้'
+    : diff>0 ? `เหลือเฉลี่ยวันละ ${fmt(diff)} 🎉` : diff<0 ? `ใช้เกินเฉลี่ยวันละ ${fmt(-diff)} 🥺` : 'เข้าเท่ากับออกพอดี';
+  $('#avgNote').className='avgnote num '+(diff>0?'good':diff<0?'bad':'');
+  // กราฟยอดสะสม
+  const cIn=[],cOut=[]; let ci=0,co=0;
+  for(let i=0;i<elapsed;i++){ ci+=vin[i]; co+=vout[i]; cIn.push(ci); cOut.push(co) }
+  const max=Math.max(ci,co,1), L=6, R=314, T=16, B=106;
+  const X=d=>L+(R-L)*(days>1?(d-1)/(days-1):0), Y=v=>B-(B-T)*v/max;
+  let s=`<line x1="${L}" y1="${T}" x2="${R}" y2="${T}" stroke="var(--line)" stroke-dasharray="3 4"/><line x1="${L}" y1="${(T+B)/2}" x2="${R}" y2="${(T+B)/2}" stroke="var(--line)" stroke-dasharray="3 4"/><line x1="${L}" y1="${B}" x2="${R}" y2="${B}" stroke="var(--line)" stroke-width="2"/>`;
+  s+=`<text x="${L}" y="${T-5}">${fmt(max)}</text>`;
+  const path=a=>a.map((v,i)=>(i?'L':'M')+X(i+1).toFixed(1)+' '+Y(v).toFixed(1)).join(' ');
+  const area=(a,c)=>a.length?`<path d="${path(a)} L${X(a.length).toFixed(1)} ${B} L${X(1)} ${B} Z" fill="var(${c})" opacity=".14"/>`:'';
+  if(tot){
+    s+=area(cIn,'--sky')+area(cOut,'--pink');
+    s+=`<path d="${path(cIn)}" fill="none" stroke="var(--sky)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`;
+    s+=`<path d="${path(cOut)}" fill="none" stroke="var(--pink)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`;
+    const ex=X(elapsed);
+    s+=`<circle cx="${ex}" cy="${Y(ci)}" r="4" fill="var(--sky)" stroke="#fff" stroke-width="2"/><circle cx="${ex}" cy="${Y(co)}" r="4" fill="var(--pink)" stroke="#fff" stroke-width="2"/>`;
+  }
+  for(let d=1; d<=elapsed; d++){ const w=(R-L)/Math.max(days-1,1);
+    s+=`<rect x="${X(d)-w/2}" y="${T}" width="${w}" height="${B-T}" fill="transparent"><title>วันที่ ${d}: เข้า ${fmt(vin[d-1])} · ออก ${fmt(vout[d-1])}</title></rect>` }
+  for(let d=1; d<=days; d++) if(d===1||d%5===0) s+=`<text x="${X(d)}" y="${B+16}" text-anchor="middle">${d}</text>`;
   $('#dailySvg').innerHTML=s;
-  $('#avgDay').textContent=avg>0?`เฉลี่ย ${fmt(avg)}/วัน`:'';
 }
 
 function renderList(rs){
