@@ -169,6 +169,65 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--sky);outline-of
 .status.bad i{background:var(--pink-deep)}
 @keyframes blink{50%{opacity:.3}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+/* ---------- มือถือ ---------- */
+input,select,textarea{font-size:16px}
+.field input{-webkit-appearance:none;appearance:none;display:block;line-height:1.2}
+input[type=date]{min-width:0;max-width:100%}
+input[type=date]::-webkit-date-and-time-value{text-align:left}
+@media (max-width:520px){
+  body{padding-block:12px 100px;font-size:14.5px}
+  .wrap{gap:14px}
+  .top{gap:10px}
+  .brand svg{width:42px;height:42px}
+  .brand h1{font-size:22px}
+  .top-r{width:100%;justify-content:space-between}
+  .month{padding:4px}
+  .month button{width:32px;height:32px;font-size:18px}
+  .month span{min-width:0;padding:0 10px;font-size:14px}
+  .acct{height:40px;padding:0 12px 0 8px;font-size:14px;max-width:46vw}
+  .notice{padding:8px 12px;font-size:13px;border-radius:14px}
+  .card{padding:14px 14px 16px;border-radius:20px;gap:12px}
+  .card h2{font-size:15.5px}
+  .card h2 .dot{width:24px;height:24px;font-size:13px;border-radius:8px}
+  .balance{font-size:32px}
+  .hero .sparkle{width:52px;right:10px;top:10px}
+  .mini{padding:10px;border-radius:14px}
+  .mini .h{font-size:12px}
+  .mini .v{font-size:18px}
+  .jar{height:12px}
+  .jar-cap{font-size:12px}
+  .seg button{padding:4px 11px;font-size:12.5px}
+  .donut-row{grid-template-columns:minmax(0,1fr);justify-items:stretch;gap:12px}
+  .donut{width:128px;height:128px;justify-self:center}
+  .donut .c b{font-size:14px}
+  .cat{padding:5px 4px;gap:8px;border-radius:12px}
+  .cat .blob{width:28px;height:28px;font-size:14px}
+  .cat .nm,.cat .amt{font-size:13px}
+  .search{height:40px}
+  .tx{gap:10px;padding:8px 2px;border-radius:12px}
+  .tx .blob{width:36px;height:36px;font-size:17px}
+  .tx .t b{font-size:14.5px}
+  .tx .a{font-size:15px}
+  .fab{right:calc(16px + env(safe-area-inset-right,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));width:58px;height:58px;padding:0;justify-content:center;font-size:0;gap:0;box-shadow:0 4px 0 var(--pink-deep),0 10px 22px rgba(232,84,140,.3)}
+  .fab .plus{width:auto;height:auto;background:none;color:#fff;font-size:34px;font-weight:600}
+  .toast{bottom:calc(80px + env(safe-area-inset-bottom,0px));font-size:13.5px}
+  .sheet{border-radius:22px 22px 0 0;gap:12px;max-height:92dvh;padding:16px 16px calc(14px + env(safe-area-inset-bottom,0px));padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+  .sheet h3{font-size:18px}
+  .acct-hero svg{width:40px;height:40px}
+  .tabs button{padding:8px 4px;font-size:14px}
+  .type{gap:6px}
+  .type button{padding:8px 6px;border-radius:12px;font-size:14px}
+  .amount{padding:2px 14px;border-radius:14px}
+  .amount span{font-size:22px}
+  .amount input{font-size:30px}
+  .picks{gap:6px}
+  .pick{padding:6px 2px;border-radius:12px;font-size:11.5px;line-height:1.25;gap:3px;text-align:center}
+  .pick .blob{width:30px;height:30px;font-size:16px}
+  .row2{grid-template-columns:1fr;gap:10px}
+  .field input{height:44px;border-radius:12px}
+  .btn{height:46px;border-radius:14px}
+  .btn.primary{font-size:16px}
+}
 </style>
 </head>
 <body>
@@ -267,7 +326,7 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--sky);outline-of
   </div>
 </div>
 
-<button class="fab" id="addBtn"><span class="plus">+</span>หยอดกระปุก</button>
+<button class="fab" id="addBtn" aria-label="หยอดกระปุก"><span class="plus">+</span>หยอดกระปุก</button>
 
 <div class="scrim" id="scrim" hidden>
   <form class="sheet" id="form" role="dialog" aria-modal="true" aria-labelledby="sheetTitle" novalidate>
