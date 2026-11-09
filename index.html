@@ -45,8 +45,14 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--sky);outline-of
 .month span{font-family:var(--display);font-weight:600;min-width:150px;text-align:center}
 
 .top-r{display:flex;align-items:center;gap:8px}
-.gear{width:46px;height:46px;border-radius:50%;border:0;background:var(--card);box-shadow:var(--shadow);font-size:20px;display:grid;place-items:center}
-.gear:hover{background:var(--sky-soft)}
+.acct{height:46px;border-radius:999px;border:0;background:var(--card);box-shadow:var(--shadow);padding:0 16px 0 10px;display:flex;align-items:center;gap:6px;font-weight:600;max-width:190px;min-width:0}
+.acct span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acct:hover{background:var(--sky-soft)}
+.tabs{display:grid;grid-template-columns:1fr 1fr;background:var(--bg);border-radius:14px;padding:4px;gap:4px}
+.tabs button{border:0;background:transparent;border-radius:11px;padding:9px 6px;font-weight:600;color:var(--muted)}
+.tabs button[aria-selected="true"]{background:var(--card);color:var(--pink-deep);box-shadow:0 1px 3px rgba(75,58,85,.12)}
+.acct-hero{display:flex;align-items:center;gap:10px}
+.acct-hero svg{width:48px;height:48px;flex:none}
 .notice-btn{border:0;background:var(--sun);color:var(--ink);border-radius:999px;padding:6px 14px;font-weight:600;font-size:13px}
 .notice{background:var(--sun-soft);border:2px dashed var(--sun);border-radius:18px;padding:10px 14px;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;font-size:14px}
 
@@ -203,13 +209,13 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--sky);outline-of
         <span id="monthLabel" class="num">—</span>
         <button id="next" aria-label="เดือนถัดไป">›</button>
       </nav>
-      <button class="gear" id="gear" aria-label="ตั้งค่าการเชื่อมต่อ">⚙️</button>
+      <button class="acct" id="gear" aria-label="บัญชีกระปุก"><span aria-hidden="true">🐷</span><span id="acctName">เปิดกระปุก</span></button>
     </div>
   </header>
 
   <div class="notice" id="demo" hidden>
-    <span>🐷 ยังไม่ได้เชื่อมกับ Google Sheet ตอนนี้แสดง <b>ข้อมูลตัวอย่าง</b> อยู่</span>
-    <button class="notice-btn" id="demoSetup">ใส่ PIN</button>
+    <span>🐷 ตอนนี้แสดง <b>ข้อมูลตัวอย่าง</b> เปิดกระปุกของคุณ หรือสร้างกระปุกใหม่เพื่อเริ่มบันทึก</span>
+    <button class="notice-btn" id="demoSetup">เปิด / สร้างกระปุก</button>
   </div>
 
   <div class="grid">
@@ -287,14 +293,20 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--sky);outline-of
 
 <div class="scrim" id="setScrim" hidden>
   <form class="sheet" id="setForm" role="dialog" aria-modal="true" aria-labelledby="setTitle" novalidate>
-    <h3 id="setTitle">🔐 ใส่ PIN เพื่อเปิดกระปุก</h3>
-    <p class="label" style="margin:0">ใส่ PIN ที่ตั้งไว้ใน Apps Script ครั้งเดียว เครื่องนี้จะจำไว้ให้</p>
-    <div class="field"><label class="label" for="sPin">PIN</label><input id="sPin" type="password" autocomplete="off"></div>
+    <div class="acct-hero"><svg aria-hidden="true"><use href="#piggy"/></svg><h3 id="setTitle">เปิดกระปุก</h3></div>
+    <div class="tabs" role="tablist" aria-label="เลือกการใช้งาน">
+      <button type="button" role="tab" data-mode="login" aria-selected="true">มีกระปุกแล้ว</button>
+      <button type="button" role="tab" data-mode="register" aria-selected="false">สร้างกระปุกใหม่</button>
+    </div>
+    <p class="label" id="setHelp" style="margin:0">ใส่ชื่อกระปุกและ PIN ของคุณ</p>
+    <div class="field" id="nameWrap"><label class="label" for="sName">ชื่อกระปุก</label><input id="sName" type="text" maxlength="30" autocomplete="username" placeholder="เช่น กระปุกของมะลิ"></div>
+    <div class="field" id="pinWrap"><label class="label" for="sPin">PIN</label><input id="sPin" type="password" maxlength="40" autocomplete="current-password"></div>
+    <div class="field" id="pin2Wrap" hidden><label class="label" for="sPin2">ใส่ PIN อีกครั้ง</label><input id="sPin2" type="password" maxlength="40" autocomplete="new-password"></div>
     <details class="adv"><summary class="label">ขั้นสูง: เปลี่ยนลิงก์ API</summary><div class="field" style="margin-top:8px"><label class="label" for="sUrl">ลิงก์ Web app (ลงท้ายด้วย /exec)</label><input id="sUrl" type="url" autocomplete="off" spellcheck="false"></div></details>
     <div class="err" id="sErr" role="alert"></div>
     <div class="actions">
-      <button type="button" class="btn danger" id="sClear" hidden>ยกเลิกการเชื่อมต่อ</button>
       <button type="button" class="btn ghost" id="sCancel">ปิด</button>
+      <button type="button" class="btn primary" id="sClear" hidden>ออกจากกระปุก</button>
       <button type="submit" class="btn primary" id="sSave">เปิดกระปุก</button>
     </div>
   </form>
@@ -330,12 +342,12 @@ const state = { y:today.getFullYear(), m:today.getMonth(), view:'out', cat:null,
 const CFG_KEY='fufu.config';
 const API_URL='https://script.google.com/macros/s/AKfycbzRaMsLpCFFZQkslcCaTXvivrobJdFbpyzwfsJpA3iO_HxSyDNGZe3x3QCg-0NOEPEj/exec';
 let cfg = (()=>{ try{ return JSON.parse(localStorage.getItem(CFG_KEY)||'null') }catch(e){ return null } })();
-const HAS_GAS = () => !!(cfg && cfg.pin);
+const HAS_GAS = () => !!(cfg && cfg.name && cfg.pin);
 
 async function callApi(action,extra,c=cfg){
   let res;
   try{
-    res = await fetch(c.url||API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action,pin:c.pin,...extra}),redirect:'follow'});
+    res = await fetch(c.url||API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action,name:c.name,pin:c.pin,...extra}),redirect:'follow'});
   }catch(e){ throw new Error('ติดต่อ Apps Script ไม่ได้ ตรวจลิงก์และอินเทอร์เน็ต') }
   let out; try{ out = await res.json() }catch(e){ throw new Error('ลิงก์นี้ไม่ใช่ API ของกระปุกฟูฟู หรือยังไม่ได้ตั้ง Who has access เป็น Anyone') }
   if(!out.ok) throw new Error(out.error||'เกิดข้อผิดพลาด');
@@ -345,7 +357,8 @@ const gas = (fn,arg) => fn==='listRecords' ? callApi('list') : fn==='saveRecord'
 function setStatus(kind,text){ $('#status').className='status '+kind; $('#statusText').textContent=text }
 
 async function load(){
-  if(!HAS_GAS()){ state.recs=makeSamples(); state.loaded=true; $('#demo').hidden=false; setStatus('','ยังไม่ได้เชื่อม Google Sheet'); render(); return }
+  $('#acctName').textContent = HAS_GAS() ? cfg.name : 'เปิดกระปุก';
+  if(!HAS_GAS()){ state.recs=makeSamples(); state.loaded=true; $('#demo').hidden=false; setStatus('','ยังไม่ได้เปิดกระปุก'); render(); return }
   $('#demo').hidden=true; state.loaded=false; render();
   setStatus('busy','กำลังโหลดจาก Google Sheet…');
   try{ state.recs = await gas('listRecords'); setStatus('ok','เชื่อมกับ Google Sheet แล้ว') }
@@ -353,29 +366,50 @@ async function load(){
   state.loaded=true; render();
 }
 
-/* หน้าตั้งค่า */
+/* บัญชีกระปุก: เปิดกระปุก / สร้างกระปุกใหม่ / ออกจากกระปุก */
+let setMode='login';
+function setModeTo(m){
+  setMode=m; const me=m==='me';
+  document.querySelectorAll('.tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.mode===m));
+  $('.tabs').hidden=me; $('#nameWrap').hidden=me; $('#pinWrap').hidden=me; $('#pin2Wrap').hidden=m!=='register'; $('.adv').hidden=me;
+  $('#sClear').hidden=!me; $('#sSave').hidden=me;
+  $('#setTitle').textContent = me ? 'กระปุกของ '+cfg.name : m==='register' ? 'สร้างกระปุกใหม่' : 'เปิดกระปุก';
+  $('#setHelp').textContent = me ? 'เครื่องนี้เปิดกระปุกนี้อยู่ ถ้าจะให้คนอื่นใช้เครื่องนี้ กด “ออกจากกระปุก” ก่อน'
+    : m==='register' ? 'ตั้งชื่อกระปุกที่ไม่ซ้ำใคร และ PIN อย่างน้อย 4 ตัว จำ PIN ไว้ให้ดี เพราะลืมแล้วกู้คืนไม่ได้'
+    : 'ใส่ชื่อกระปุกและ PIN ของคุณ เครื่องนี้จะจำไว้ให้';
+  $('#sSave').textContent = m==='register' ? 'สร้างกระปุก' : 'เปิดกระปุก';
+  $('#sPin').autocomplete = m==='register' ? 'new-password' : 'current-password';
+  $('#sErr').textContent='';
+}
 function openSettings(){
-  $('#sUrl').value=cfg?.url||API_URL; $('#sPin').value=cfg?.pin||''; $('#sErr').textContent='';
-  $('#sClear').hidden=!HAS_GAS(); $('#setScrim').hidden=false; setTimeout(()=>$('#sPin').focus(),60);
+  $('#sUrl').value=cfg?.url||API_URL; $('#sName').value=cfg?.name||''; $('#sPin').value=''; $('#sPin2').value='';
+  setModeTo(HAS_GAS()?'me':'login');
+  $('#setScrim').hidden=false; setTimeout(()=>(HAS_GAS()?$('#sCancel'):$('#sName')).focus(),60);
 }
 function closeSettings(){ $('#setScrim').hidden=true; $('#gear').focus() }
+document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{ setModeTo(b.dataset.mode); $('#sName').focus() });
 $('#gear').onclick=openSettings; $('#demoSetup').onclick=openSettings;
 $('#sCancel').onclick=closeSettings;
 $('#setScrim').addEventListener('click',e=>{ if(e.target.id==='setScrim') closeSettings() });
 $('#setForm').addEventListener('submit',async e=>{
   e.preventDefault();
-  const c={url:$('#sUrl').value.trim()||API_URL,pin:$('#sPin').value.trim()};
-  if(!/^https:\/\/script\.google(usercontent)?\.com\/.+\/exec$/.test(c.url)){ $('#sErr').textContent='ลิงก์ต้องขึ้นต้นด้วย https://script.google.com/ และลงท้ายด้วย /exec'; return }
-  if(!c.pin){ $('#sErr').textContent='ใส่ PIN ก่อนนะ'; $('#sPin').focus(); return }
-  $('#sSave').disabled=true; $('#sErr').textContent='กำลังทดสอบการเชื่อมต่อ…';
+  if(setMode==='me') return;
+  const reg=setMode==='register';
+  const c={url:$('#sUrl').value.trim()||API_URL,name:$('#sName').value.trim().replace(/\s+/g,' '),pin:$('#sPin').value};
+  if(!/^https:\/\/script\.google(usercontent)?\.com\/.+\/exec$/.test(c.url)){ $('#sErr').textContent='ลิงก์ API ต้องขึ้นต้นด้วย https://script.google.com/ และลงท้ายด้วย /exec'; return }
+  if(c.name.length<2){ $('#sErr').textContent='ใส่ชื่อกระปุกอย่างน้อย 2 ตัวอักษร'; $('#sName').focus(); return }
+  if(c.pin.length<4){ $('#sErr').textContent='PIN ต้องมีอย่างน้อย 4 ตัว'; $('#sPin').focus(); return }
+  if(reg && c.pin!==$('#sPin2').value){ $('#sErr').textContent='PIN สองช่องไม่ตรงกัน'; $('#sPin2').focus(); return }
+  $('#sSave').disabled=true; $('#sErr').textContent=reg?'กำลังสร้างกระปุก…':'กำลังเปิดกระปุก…';
   try{
-    await callApi('list',{},c);
+    const r=await callApi(reg?'register':'login',{},c);
+    if(r&&r.name) c.name=r.name;
     cfg=c; try{ localStorage.setItem(CFG_KEY,JSON.stringify(c)) }catch(_){}
-    closeSettings(); toast('เชื่อมกับ Google Sheet แล้ว 🎉'); load();
+    closeSettings(); toast(reg?'สร้างกระปุก “'+c.name+'” แล้ว 🎉':'ยินดีต้อนรับ '+c.name+' 🐷'); load();
   }catch(err){ $('#sErr').textContent=err.message }
   $('#sSave').disabled=false;
 });
-$('#sClear').onclick=()=>{ cfg=null; try{ localStorage.removeItem(CFG_KEY) }catch(_){}; closeSettings(); toast('ยกเลิกการเชื่อมต่อแล้ว'); load() };
+$('#sClear').onclick=()=>{ cfg=null; try{ localStorage.removeItem(CFG_KEY) }catch(_){}; closeSettings(); toast('ออกจากกระปุกแล้ว'); load(); setTimeout(openSettings,300) };
 async function saveRec(rec){
   if(!HAS_GAS()){ const saved={...rec,id:rec.id||('d'+Date.now())}; upsert(saved); render(); return saved }
   const tmp = rec.id || ('tmp'+Date.now());
