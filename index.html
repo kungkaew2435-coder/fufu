@@ -406,6 +406,7 @@ input[type=date]::-webkit-date-and-time-value{text-align:left}
     <div class="field" id="pin2Wrap" hidden><label class="label" for="sPin2">ใส่ PIN อีกครั้ง</label><input id="sPin2" type="password" maxlength="40" autocomplete="new-password"></div>
     <div class="field" id="iconWrap" hidden><span class="label" id="iconLabel">เลือกไอคอนกระปุก</span><div class="icons" id="iconPick" role="radiogroup" aria-labelledby="iconLabel"></div></div>
     <button type="button" class="btn link" id="sRefresh" hidden>🔄 รีเฟรชแอปและข้อมูล</button>
+    <button type="button" class="btn link" id="sExport" hidden>📥 ส่งออกข้อมูลเป็นไฟล์ CSV (เปิดใน Excel ได้)</button>
     <div class="err" id="sErr" role="alert"></div>
     <div class="actions">
       <button type="button" class="btn ghost" id="sCancel">ปิด</button>
@@ -419,6 +420,9 @@ input[type=date]::-webkit-date-and-time-value{text-align:left}
 
 <div class="toast" id="toast" hidden><span id="toastMsg"></span><button id="toastUndo" hidden>เลิกทำ</button></div>
 
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script>
 /* หมวดหมู่ — ชื่อหมวดคือค่าที่เก็บในคอลัมน์ "หมวด" ของ Sheet */
 const CATS = {
@@ -443,37 +447,114 @@ const tint = (v,p) => `color-mix(in srgb,var(${v}) ${p}%,#fff)`;
 const today = new Date();
 const state = { y:today.getFullYear(), m:today.getMonth(), view:'out', cat:null, q:'', recs:[], loaded:false, pending:new Set() };
 
-/* ---------- การเชื่อมต่อ Google Sheet (ผ่าน Apps Script) ---------- */
+/* ---------- ที่เก็บข้อมูล: Firebase (Auth + Firestore) ---------- */
 const CFG_KEY='fufu.config';
-const APP_VERSION='2026-11-09.2';
-const API_URL='https://script.google.com/macros/s/AKfycbzRaMsLpCFFZQkslcCaTXvivrobJdFbpyzwfsJpA3iO_HxSyDNGZe3x3QCg-0NOEPEj/exec';
-let cfg = (()=>{ try{ return JSON.parse(localStorage.getItem(CFG_KEY)||'null') }catch(e){ return null } })();
-const HAS_GAS = () => !!(cfg && cfg.name && cfg.pin);
-const ICONS=['🐷','🐱','🐰','🐻','🐼','🦊','🐥','🦄','🐶','🐨','🐸','🐹'];
-function saveCfg(){ try{ localStorage.setItem(CFG_KEY,JSON.stringify(cfg)) }catch(_){} }
-function updateAcct(){ $('#acctIcon').textContent = HAS_GAS() ? (cfg.icon||'🐷') : '🐷'; $('#acctName').textContent = HAS_GAS() ? cfg.name : 'เปิดกระปุก'; }
+const APP_VERSION='2026-11-09.3';
+// ระบบเดิม (Google Sheet ผ่าน Apps Script) ใช้เฉพาะตอนย้ายกระปุกเก่ามา Firebase ครั้งแรก
+const LEGACY_API='https://script.google.com/macros/s/AKfycbzRaMsLpCFFZQkslcCaTXvivrobJdFbpyzwfsJpA3iO_HxSyDNGZe3x3QCg-0NOEPEj/exec';
+firebase.initializeApp({
+  apiKey:'AIzaSyDa8-YQam8DIStHK1w8K7ugh7eWnk_C57k',
+  authDomain:'kapook-fufu.firebaseapp.com',
+  projectId:'kapook-fufu',
+  storageBucket:'kapook-fufu.firebasestorage.app',
+  messagingSenderId:'830760920503',
+  appId:'1:830760920503:web:cdd55453cecc994e2a3432'
+});
+const auth=firebase.auth(), db=firebase.firestore();
+try{ db.enablePersistence({synchronizeTabs:true}).catch(()=>{}) }catch(_){}
 
-async function callApi(action,extra,c=cfg){
+let cfg = (()=>{ try{ return JSON.parse(localStorage.getItem(CFG_KEY)||'null') }catch(e){ return null } })();
+let user=null, unsub=null;
+const HAS_GAS = () => !!user;
+const ICONS=['🐷','🐱','🐰','🐻','🐼','🦊','🐥','🦄','🐶','🐨','🐸','🐹'];
+function saveCfg(){ try{ cfg ? localStorage.setItem(CFG_KEY,JSON.stringify(cfg)) : localStorage.removeItem(CFG_KEY) }catch(_){} }
+function updateAcct(){ $('#acctIcon').textContent = HAS_GAS() ? (cfg?.icon||'🐷') : '🐷'; $('#acctName').textContent = HAS_GAS() ? (cfg?.name||'กระปุกของฉัน') : 'เปิดกระปุก'; }
+function setStatus(kind,text){ $('#status').className='status '+kind; $('#statusText').textContent=text }
+
+const normName = n => String(n||'').trim().replace(/\s+/g,' ').toLowerCase();
+const nameKey = n => normName(n).replace(/\//g,'∕');
+const pw = pin => 'fufu-pin:'+pin;
+async function emailFor(name){
+  const buf=await crypto.subtle.digest('SHA-256', new TextEncoder().encode('fufu|'+normName(name)));
+  return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('').slice(0,40)+'@kapook-fufu.app';
+}
+const txCol = () => db.collection('users').doc(user.uid).collection('tx');
+const BAD_LOGIN = ['auth/invalid-credential','auth/invalid-login-credentials','auth/user-not-found','auth/wrong-password'];
+function fbErr(e){
+  const c=e&&e.code||'';
+  if(c==='auth/too-many-requests') return 'ลองผิดหลายครั้งเกินไป รอสักครู่แล้วลองใหม่';
+  if(c==='auth/network-request-failed'||c==='unavailable') return 'ติดต่อเซิร์ฟเวอร์ไม่ได้ ตรวจอินเทอร์เน็ตแล้วลองใหม่';
+  if(c==='permission-denied') return 'ไม่มีสิทธิ์เข้าถึงข้อมูลนี้';
+  return (e&&e.message)||'เกิดข้อผิดพลาด';
+}
+
+async function legacyApi(action,extra){
   let res;
-  try{
-    res = await fetch(c.url||API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action,name:c.name,pin:c.pin,...extra}),redirect:'follow'});
-  }catch(e){ throw new Error('ติดต่อ Apps Script ไม่ได้ ตรวจลิงก์และอินเทอร์เน็ต') }
-  let out; try{ out = await res.json() }catch(e){ throw new Error('ลิงก์นี้ไม่ใช่ API ของกระปุกฟูฟู หรือยังไม่ได้ตั้ง Who has access เป็น Anyone') }
+  try{ res=await fetch(LEGACY_API,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action,...extra})}) }
+  catch(e){ throw new Error('ติดต่อระบบเดิมไม่ได้ ตรวจอินเทอร์เน็ตแล้วลองใหม่') }
+  const out=await res.json().catch(()=>({ok:false,error:'ระบบเดิมตอบกลับไม่ถูกต้อง'}));
   if(!out.ok) throw new Error(out.error||'เกิดข้อผิดพลาด');
   return out.data;
 }
-const gas = (fn,arg) => fn==='listRecords' ? callApi('list') : fn==='saveRecord' ? callApi('save',{rec:arg}) : callApi('delete',{id:arg});
-function setStatus(kind,text){ $('#status').className='status '+kind; $('#statusText').textContent=text }
+
+/* ย้ายกระปุกจากระบบเดิม (Google Sheet) มา Firebase */
+async function migrate(name,pin){
+  const old=await legacyApi('login',{name,pin});
+  setStatus('busy','กำลังย้ายข้อมูลไป Firebase…'); $('#sErr').textContent='กำลังย้ายข้อมูลจากระบบเดิม…';
+  const recs=await legacyApi('list',{name,pin});
+  const cred=await auth.createUserWithEmailAndPassword(await emailFor(old.name), pw(pin));
+  const uid=cred.user.uid;
+  await db.collection('names').doc(nameKey(old.name)).set({uid});
+  await db.collection('users').doc(uid).set({name:old.name, icon:old.icon||'🐷', createdAt:Date.now(), migratedFrom:'google-sheet'});
+  for(let i=0;i<recs.length;i+=400){
+    const b=db.batch();
+    recs.slice(i,i+400).forEach(r=>b.set(db.collection('users').doc(uid).collection('tx').doc(String(r.id)),
+      {type:r.type==='in'?'in':'out',cat:String(r.cat||'อื่นๆ'),amount:Number(r.amount),date:String(r.date).slice(0,10),note:String(r.note||''),createdAt:Number(r.createdAt)||Date.now()}));
+    await b.commit();
+  }
+  setStatus('','');
+  return {name:old.name, icon:old.icon||'🐷', moved:recs.length};
+}
+
+async function signIn(name,pin){
+  try{ await auth.signInWithEmailAndPassword(await emailFor(name), pw(pin)) }
+  catch(e){
+    if(!BAD_LOGIN.includes(e.code)) throw new Error(fbErr(e));
+    const taken=(await db.collection('names').doc(nameKey(name)).get()).exists;
+    if(taken) throw new Error('PIN ไม่ถูกต้อง');
+    return await migrate(name,pin);
+  }
+  const p=(await db.collection('users').doc(auth.currentUser.uid).get()).data()||{};
+  return {name:p.name||name, icon:p.icon||'🐷'};
+}
+
+async function register(name,pin,icon){
+  const key=nameKey(name);
+  if((await db.collection('names').doc(key).get()).exists) throw new Error('ชื่อกระปุกนี้มีคนใช้แล้ว ลองตั้งชื่ออื่น');
+  // กันชื่อซ้ำกับกระปุกในระบบเดิมที่ยังไม่ได้ย้าย
+  const legacyTaken = await legacyApi('login',{name,pin:'-'}).then(()=>true,e=>e.message!=='ไม่พบกระปุกชื่อนี้');
+  if(legacyTaken) throw new Error('ชื่อกระปุกนี้มีคนใช้แล้ว ลองตั้งชื่ออื่น');
+  let cred;
+  try{ cred=await auth.createUserWithEmailAndPassword(await emailFor(name), pw(pin)) }
+  catch(e){ throw new Error(e.code==='auth/email-already-in-use'?'ชื่อกระปุกนี้มีคนใช้แล้ว ลองตั้งชื่ออื่น':fbErr(e)) }
+  try{ await db.collection('names').doc(key).set({uid:cred.user.uid}) }
+  catch(e){ await cred.user.delete().catch(()=>{}); throw new Error('ชื่อกระปุกนี้มีคนใช้แล้ว ลองตั้งชื่ออื่น') }
+  await db.collection('users').doc(cred.user.uid).set({name, icon, createdAt:Date.now()});
+  return {name, icon};
+}
 
 async function load(){
   updateAcct();
-  if(HAS_GAS()) callApi('login').then(r=>{ if(r && (r.icon!==cfg.icon || r.name!==cfg.name)){ cfg.icon=r.icon; cfg.name=r.name; saveCfg(); updateAcct() } }).catch(()=>{});
-  if(!HAS_GAS()){ state.recs=makeSamples(); state.loaded=true; $('#demo').hidden=false; setStatus('','ยังไม่ได้เปิดกระปุก'); render(); return }
+  if(unsub){ unsub(); unsub=null }
+  if(!user){ state.recs=makeSamples(); state.loaded=true; $('#demo').hidden=false; render(); return }
   $('#demo').hidden=true; state.loaded=false; render();
-  setStatus('busy','กำลังโหลดจาก Google Sheet…');
-  try{ state.recs = await gas('listRecords'); setStatus('ok','เชื่อมกับ Google Sheet แล้ว') }
-  catch(e){ state.recs=[]; setStatus('bad',e.message) }
-  state.loaded=true; render();
+  await new Promise(res=>{
+    let first=true; const done=()=>{ if(first){ first=false; res() } };
+    unsub=txCol().onSnapshot(snap=>{
+      state.recs=snap.docs.map(d=>({id:d.id,...d.data()})); state.loaded=true; setStatus('',''); render(); done();
+    }, err=>{ state.loaded=true; setStatus('bad','โหลดข้อมูลไม่ได้: '+fbErr(err)); render(); done() });
+  });
+  db.collection('users').doc(user.uid).get().then(d=>{ const p=d.data(); if(p && (p.name!==cfg?.name || p.icon!==cfg?.icon)){ cfg={uid:user.uid,name:p.name,icon:p.icon||'🐷'}; saveCfg(); updateAcct() } }).catch(()=>{});
 }
 
 /* บัญชีกระปุก: เปิดกระปุก / สร้างกระปุกใหม่ / ออกจากกระปุก */
@@ -482,20 +563,20 @@ function drawIcons(){
   $('#iconPick').innerHTML=ICONS.map(i=>`<button type="button" class="ic" role="radio" aria-checked="${i===pickIcon}" data-i="${i}">${i}</button>`).join('');
   document.querySelectorAll('#iconPick .ic').forEach(b=>b.onclick=()=>chooseIcon(b.dataset.i));
 }
-async function chooseIcon(i){
+function chooseIcon(i){
   const prev=pickIcon; pickIcon=i; drawIcons();
   if(setMode!=='me' || i===prev) return;
-  cfg.icon=i; saveCfg(); updateAcct(); $('#sErr').textContent='';
-  try{ await callApi('setIcon',{icon:i}); toast('เปลี่ยนไอคอนเป็น '+i+' แล้ว') }
-  catch(e){ pickIcon=prev; cfg.icon=prev; saveCfg(); updateAcct(); drawIcons(); $('#sErr').textContent=e.message }
+  cfg={...cfg,icon:i}; saveCfg(); updateAcct(); $('#sErr').textContent='';
+  db.collection('users').doc(user.uid).set({icon:i},{merge:true}).catch(e=>{ $('#sErr').textContent=fbErr(e) });
+  toast('เปลี่ยนไอคอนเป็น '+i+' แล้ว');
 }
 function setModeTo(m){
   setMode=m; const me=m==='me';
   document.querySelectorAll('.tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.mode===m));
   $('.tabs').hidden=me; $('#nameWrap').hidden=me; $('#pinWrap').hidden=me; $('#pin2Wrap').hidden=m!=='register';
-  $('#sClear').hidden=!me; $('#sSave').hidden=me; $('#sRefresh').hidden=!me;
+  $('#sClear').hidden=!me; $('#sSave').hidden=me; $('#sRefresh').hidden=!me; $('#sExport').hidden=!me;
   $('#iconWrap').hidden=m==='login'; $('#iconLabel').textContent = me ? 'แตะเพื่อเปลี่ยนไอคอน' : 'เลือกไอคอนกระปุก';
-  $('#setTitle').textContent = me ? 'กระปุกของ '+cfg.name : m==='register' ? 'สร้างกระปุกใหม่' : 'เปิดกระปุก';
+  $('#setTitle').textContent = me ? 'กระปุกของ '+(cfg?.name||'') : m==='register' ? 'สร้างกระปุกใหม่' : 'เปิดกระปุก';
   $('#setHelp').textContent = me ? 'เครื่องนี้เปิดกระปุกนี้อยู่ ถ้าจะให้คนอื่นใช้เครื่องนี้ กด “ออกจากกระปุก” ก่อน'
     : m==='register' ? 'ตั้งชื่อกระปุกที่ไม่ซ้ำใคร และ PIN อย่างน้อย 4 ตัว จำ PIN ไว้ให้ดี เพราะลืมแล้วกู้คืนไม่ได้'
     : 'ใส่ชื่อกระปุกและ PIN ของคุณ เครื่องนี้จะจำไว้ให้';
@@ -505,7 +586,7 @@ function setModeTo(m){
 }
 function openSettings(){
   $('#sName').value=cfg?.name||''; $('#sPin').value=''; $('#sPin2').value='';
-  pickIcon=(HAS_GAS()&&cfg.icon)||'🐷'; drawIcons();
+  pickIcon=(HAS_GAS()&&cfg?.icon)||'🐷'; drawIcons();
   setModeTo(HAS_GAS()?'me':'login');
   $('#setScrim').hidden=false; setTimeout(()=>(HAS_GAS()?$('#sCancel'):$('#sName')).focus(),60);
 }
@@ -518,42 +599,46 @@ $('#setForm').addEventListener('submit',async e=>{
   e.preventDefault();
   if(setMode==='me') return;
   const reg=setMode==='register';
-  const c={url:cfg?.url||API_URL,name:$('#sName').value.trim().replace(/\s+/g,' '),pin:$('#sPin').value};
-  if(c.name.length<2){ $('#sErr').textContent='ใส่ชื่อกระปุกอย่างน้อย 2 ตัวอักษร'; $('#sName').focus(); return }
-  if(c.pin.length<4){ $('#sErr').textContent='PIN ต้องมีอย่างน้อย 4 ตัว'; $('#sPin').focus(); return }
-  if(reg && c.pin!==$('#sPin2').value){ $('#sErr').textContent='PIN สองช่องไม่ตรงกัน'; $('#sPin2').focus(); return }
+  const name=$('#sName').value.trim().replace(/\s+/g,' '), pin=$('#sPin').value;
+  if(name.length<2){ $('#sErr').textContent='ใส่ชื่อกระปุกอย่างน้อย 2 ตัวอักษร'; $('#sName').focus(); return }
+  if(name.length>30){ $('#sErr').textContent='ชื่อกระปุกยาวได้ไม่เกิน 30 ตัวอักษร'; $('#sName').focus(); return }
+  if(pin.length<4){ $('#sErr').textContent='PIN ต้องมีอย่างน้อย 4 ตัว'; $('#sPin').focus(); return }
+  if(reg && pin!==$('#sPin2').value){ $('#sErr').textContent='PIN สองช่องไม่ตรงกัน'; $('#sPin2').focus(); return }
   $('#sSave').disabled=true; $('#sErr').textContent=reg?'กำลังสร้างกระปุก…':'กำลังเปิดกระปุก…';
   try{
-    const r=await callApi(reg?'register':'login',reg?{icon:pickIcon}:{},c);
-    if(r&&r.name) c.name=r.name;
-    c.icon=(r&&r.icon)||pickIcon;
-    cfg=c; saveCfg();
-    closeSettings(); toast(reg?'สร้างกระปุก “'+c.name+'” แล้ว 🎉':'ยินดีต้อนรับ '+c.name+' '+c.icon); load();
+    const r = reg ? await register(name,pin,pickIcon) : await signIn(name,pin);
+    cfg={uid:auth.currentUser.uid,name:r.name,icon:r.icon}; saveCfg(); updateAcct();
+    closeSettings();
+    toast(reg ? 'สร้างกระปุก “'+r.name+'” แล้ว 🎉' : r.moved!=null ? 'ย้ายข้อมูล '+r.moved+' รายการมาไว้ที่ Firebase แล้ว 🎉' : 'ยินดีต้อนรับ '+r.name+' '+r.icon);
   }catch(err){ $('#sErr').textContent=err.message }
   $('#sSave').disabled=false;
 });
-$('#sClear').onclick=()=>{ cfg=null; try{ localStorage.removeItem(CFG_KEY) }catch(_){}; closeSettings(); toast('ออกจากกระปุกแล้ว'); load(); setTimeout(openSettings,300) };
-async function saveRec(rec){
-  if(!HAS_GAS()){ const saved={...rec,id:rec.id||('d'+Date.now())}; upsert(saved); render(); return saved }
-  const tmp = rec.id || ('tmp'+Date.now());
-  upsert({...rec,id:tmp}); state.pending.add(tmp); render();
-  setStatus('busy','กำลังบันทึกลง Sheet…');
-  try{
-    const saved = await gas('saveRecord', rec);
-    state.recs = state.recs.filter(r=>r.id!==tmp); upsert(saved);
-    setStatus('ok','บันทึกลง Google Sheet แล้ว'); return saved;
-  }catch(e){
-    state.recs = state.recs.filter(r=>r.id!==tmp);
-    if(rec.id && rec._prev) upsert(rec._prev);
-    setStatus('bad','บันทึกไม่สำเร็จ'); throw e;
-  }finally{ state.pending.delete(tmp); render() }
+$('#sClear').onclick=async()=>{
+  if(unsub){ unsub(); unsub=null }
+  await auth.signOut().catch(()=>{});
+  cfg=null; saveCfg(); closeSettings(); toast('ออกจากกระปุกแล้ว'); setTimeout(openSettings,300);
+};
+$('#sExport').onclick=async()=>{
+  const rows=[['วันที่','ประเภท','หมวด','จำนวนเงิน','บันทึก']].concat(
+    state.recs.slice().sort((a,b)=>a.date.localeCompare(b.date)).map(r=>[r.date, r.type==='in'?'รายรับ':'รายจ่าย', r.cat, r.amount, r.note||'']));
+  const csv='\ufeff'+rows.map(r=>r.map(v=>{ v=String(v); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v }).join(',')).join('\r\n');
+  const fname='กระปุกฟูฟู-'+(cfg?.name||'ข้อมูล')+'-'+isoDay(today)+'.csv';
+  const file=new File([csv],fname,{type:'text/csv'});
+  try{ if(navigator.canShare && navigator.canShare({files:[file]})){ await navigator.share({files:[file],title:fname}); return } }catch(e){ if(e.name==='AbortError') return }
+  const a=document.createElement('a'); a.href=URL.createObjectURL(file); a.download=fname; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+};
+function saveRec(rec){
+  const {id,_prev,...data}=rec;
+  if(!user){ const saved={...data,id:id||('d'+Date.now())}; upsert(saved); render(); return Promise.resolve(saved) }
+  const ref = id ? txCol().doc(String(id)) : txCol().doc();
+  ref.set(data).catch(e=>toast('บันทึกไม่สำเร็จ: '+fbErr(e)));
+  return Promise.resolve({...data,id:ref.id});
 }
-async function removeRec(rec){
-  state.recs = state.recs.filter(r=>r.id!==rec.id); render();
-  if(!HAS_GAS()) return;
-  setStatus('busy','กำลังลบจาก Sheet…');
-  try{ await gas('deleteRecord', rec.id); setStatus('ok','ลบแล้ว') }
-  catch(e){ upsert(rec); render(); setStatus('bad','ลบไม่สำเร็จ'); throw e }
+function removeRec(rec){
+  if(!user){ state.recs=state.recs.filter(r=>r.id!==rec.id); render(); return Promise.resolve() }
+  txCol().doc(String(rec.id)).delete().catch(e=>toast('ลบไม่สำเร็จ: '+fbErr(e)));
+  return Promise.resolve();
 }
 function upsert(r){ const i=state.recs.findIndex(x=>x.id===r.id); if(i>=0) state.recs[i]=r; else state.recs.push(r) }
 
@@ -777,8 +862,25 @@ if(STANDALONE){
     else hide(); d=0 });
 }
 
-render(); load();
-if(!HAS_GAS()) setTimeout(openSettings,400);
+render();
+let firstAuth=true;
+auth.onAuthStateChanged(async u=>{
+  user=u;
+  if(u && cfg && cfg.uid!==u.uid){ cfg={uid:u.uid,name:cfg.name,icon:cfg.icon}; saveCfg() }
+  load();
+  if(!firstAuth) return; firstAuth=false;
+  if(u) return;
+  // เครื่องที่เคยเปิดกระปุกไว้ในเวอร์ชันเก่า: ย้ายไป Firebase ให้อัตโนมัติ
+  if(cfg && cfg.name && cfg.pin){
+    try{
+      const r=await signIn(cfg.name,cfg.pin);
+      cfg={uid:auth.currentUser.uid,name:r.name,icon:r.icon}; saveCfg(); updateAcct();
+      toast(r.moved!=null ? 'ย้ายข้อมูล '+r.moved+' รายการมาไว้ที่ Firebase แล้ว 🎉' : 'ยินดีต้อนรับ '+r.name+' '+r.icon);
+      return;
+    }catch(e){ setStatus('','') }
+  }
+  setTimeout(openSettings,400);
+});
 setTimeout(checkUpdate,1500);
 </script>
 </body>
