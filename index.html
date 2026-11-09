@@ -449,7 +449,7 @@ const state = { y:today.getFullYear(), m:today.getMonth(), view:'out', cat:null,
 
 /* ---------- ที่เก็บข้อมูล: Firebase (Auth + Firestore) ---------- */
 const CFG_KEY='fufu.config';
-const APP_VERSION='2026-11-09.3';
+const APP_VERSION='2026-11-09.4';
 // ระบบเดิม (Google Sheet ผ่าน Apps Script) ใช้เฉพาะตอนย้ายกระปุกเก่ามา Firebase ครั้งแรก
 const LEGACY_API='https://script.google.com/macros/s/AKfycbzRaMsLpCFFZQkslcCaTXvivrobJdFbpyzwfsJpA3iO_HxSyDNGZe3x3QCg-0NOEPEj/exec';
 firebase.initializeApp({
@@ -472,7 +472,7 @@ function updateAcct(){ $('#acctIcon').textContent = HAS_GAS() ? (cfg?.icon||'�
 function setStatus(kind,text){ $('#status').className='status '+kind; $('#statusText').textContent=text }
 
 const normName = n => String(n||'').trim().replace(/\s+/g,' ').toLowerCase();
-const nameKey = n => normName(n).replace(/\//g,'∕');
+const nameKey = n => 'n_'+normName(n).replace(/\//g,'∕');
 const pw = pin => 'fufu-pin:'+pin;
 async function emailFor(name){
   const buf=await crypto.subtle.digest('SHA-256', new TextEncoder().encode('fufu|'+normName(name)));
