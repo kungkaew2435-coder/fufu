@@ -194,6 +194,11 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--sky);outline-of
 .status.bad i{background:var(--pink-deep)}
 .status:not(.bad){display:none}
 @keyframes blink{50%{opacity:.3}}
+.ptr{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 8px);transform:translate(-50%,-80px);z-index:50;background:var(--card);color:var(--pink-deep);box-shadow:var(--shadow);border-radius:999px;padding:8px 16px;font-size:13.5px;font-weight:600;display:flex;align-items:center;gap:6px;pointer-events:none;transition:transform .2s}
+.ptr.drag{transition:none}
+.ptr.spin span{display:inline-block;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.btn.link{background:transparent;color:var(--sky-deep);padding:0 4px;height:auto;font-size:14px;justify-self:start}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 /* ---------- มือถือ ---------- */
 input,select,textarea{font-size:16px}
@@ -400,6 +405,7 @@ input[type=date]::-webkit-date-and-time-value{text-align:left}
     <div class="field" id="pinWrap"><label class="label" for="sPin">PIN</label><input id="sPin" type="password" maxlength="40" autocomplete="current-password"></div>
     <div class="field" id="pin2Wrap" hidden><label class="label" for="sPin2">ใส่ PIN อีกครั้ง</label><input id="sPin2" type="password" maxlength="40" autocomplete="new-password"></div>
     <div class="field" id="iconWrap" hidden><span class="label" id="iconLabel">เลือกไอคอนกระปุก</span><div class="icons" id="iconPick" role="radiogroup" aria-labelledby="iconLabel"></div></div>
+    <button type="button" class="btn link" id="sRefresh" hidden>🔄 รีเฟรชแอปและข้อมูล</button>
     <div class="err" id="sErr" role="alert"></div>
     <div class="actions">
       <button type="button" class="btn ghost" id="sCancel">ปิด</button>
@@ -408,6 +414,8 @@ input[type=date]::-webkit-date-and-time-value{text-align:left}
     </div>
   </form>
 </div>
+
+<div class="ptr" id="ptr" aria-live="polite"><span>🐷</span><b id="ptrText">ดึงลงเพื่อรีเฟรช</b></div>
 
 <div class="toast" id="toast" hidden><span id="toastMsg"></span><button id="toastUndo" hidden>เลิกทำ</button></div>
 
@@ -437,6 +445,7 @@ const state = { y:today.getFullYear(), m:today.getMonth(), view:'out', cat:null,
 
 /* ---------- การเชื่อมต่อ Google Sheet (ผ่าน Apps Script) ---------- */
 const CFG_KEY='fufu.config';
+const APP_VERSION='2026-11-09.2';
 const API_URL='https://script.google.com/macros/s/AKfycbzRaMsLpCFFZQkslcCaTXvivrobJdFbpyzwfsJpA3iO_HxSyDNGZe3x3QCg-0NOEPEj/exec';
 let cfg = (()=>{ try{ return JSON.parse(localStorage.getItem(CFG_KEY)||'null') }catch(e){ return null } })();
 const HAS_GAS = () => !!(cfg && cfg.name && cfg.pin);
@@ -484,7 +493,7 @@ function setModeTo(m){
   setMode=m; const me=m==='me';
   document.querySelectorAll('.tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.mode===m));
   $('.tabs').hidden=me; $('#nameWrap').hidden=me; $('#pinWrap').hidden=me; $('#pin2Wrap').hidden=m!=='register';
-  $('#sClear').hidden=!me; $('#sSave').hidden=me;
+  $('#sClear').hidden=!me; $('#sSave').hidden=me; $('#sRefresh').hidden=!me;
   $('#iconWrap').hidden=m==='login'; $('#iconLabel').textContent = me ? 'แตะเพื่อเปลี่ยนไอคอน' : 'เลือกไอคอนกระปุก';
   $('#setTitle').textContent = me ? 'กระปุกของ '+cfg.name : m==='register' ? 'สร้างกระปุกใหม่' : 'เปิดกระปุก';
   $('#setHelp').textContent = me ? 'เครื่องนี้เปิดกระปุกนี้อยู่ ถ้าจะให้คนอื่นใช้เครื่องนี้ กด “ออกจากกระปุก” ก่อน'
@@ -730,8 +739,47 @@ document.querySelectorAll('.seg button').forEach(b=>b.onclick=()=>{ state.view=b
 $('#q').addEventListener('input',e=>{ state.q=e.target.value.trim(); render() });
 $('#clearFilter').onclick=()=>{ state.cat=null; state.q=''; $('#q').value=''; render() };
 
+/* ---------- อัปเดตแอปอัตโนมัติ ---------- */
+let lastCheck=0;
+async function checkUpdate(){
+  lastCheck=Date.now();
+  try{
+    const html=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'}).then(r=>r.text());
+    const m=html.match(/const APP_VERSION='([^']+)'/);
+    if(!m) return false;
+    if(m[1]===APP_VERSION){ try{ sessionStorage.removeItem('fufu.upd') }catch(_){} return false }
+    let n=0; try{ n=+sessionStorage.getItem('fufu.upd')||0 }catch(_){}
+    if(n>=3) return false;
+    try{ sessionStorage.setItem('fufu.upd',n+1) }catch(_){}
+    toast('มีเวอร์ชันใหม่ กำลังอัปเดต… ✨');
+    setTimeout(()=>location.replace(location.pathname+'?v='+encodeURIComponent(m[1])),700);
+    return true;
+  }catch(e){ return false }
+}
+async function refreshAll(){
+  if(await checkUpdate()) return;
+  await load(); toast('อัปเดตล่าสุดแล้ว 🐷');
+}
+$('#sRefresh').onclick=()=>{ closeSettings(); refreshAll() };
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible' && Date.now()-lastCheck>60000) checkUpdate() });
+
+/* ดึงลงเพื่อรีเฟรช (เฉพาะตอนเปิดจากไอคอนบนหน้าจอโฮม) */
+const STANDALONE = navigator.standalone===true || matchMedia('(display-mode: standalone)').matches;
+if(STANDALONE){
+  const el=$('#ptr'), txt=$('#ptrText'); let y0=null, d=0, busy=false;
+  const show=px=>{ el.style.transform=`translate(-50%,${px}px)` };
+  const hide=()=>{ el.classList.remove('drag','spin'); show(-80) };
+  addEventListener('touchstart',e=>{ y0 = (!busy && scrollY<=0 && $('#scrim').hidden && $('#setScrim').hidden) ? e.touches[0].clientY : null; d=0 },{passive:true});
+  addEventListener('touchmove',e=>{ if(y0==null) return; d=Math.max(0,e.touches[0].clientY-y0); if(!d) return;
+    el.classList.add('drag'); show(Math.min(d,120)*0.6-60); txt.textContent = d>80 ? 'ปล่อยเพื่อรีเฟรช' : 'ดึงลงเพื่อรีเฟรช' },{passive:true});
+  addEventListener('touchend',async()=>{ if(y0==null) return; y0=null; el.classList.remove('drag');
+    if(d>80){ busy=true; el.classList.add('spin'); txt.textContent='กำลังรีเฟรช…'; show(4); try{ await refreshAll() } finally { busy=false; hide() } }
+    else hide(); d=0 });
+}
+
 render(); load();
 if(!HAS_GAS()) setTimeout(openSettings,400);
+setTimeout(checkUpdate,1500);
 </script>
 </body>
 </html>
